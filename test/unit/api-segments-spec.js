@@ -1,7 +1,9 @@
 'use strict';
 
+require('./setup');
+
 var Peaks = require('../../src/main');
-var Segment = require('../../src/main/markers/segment');
+var Segment = require('../../src/segment');
 
 describe('Peaks.segments', function() {
   var p, deprecationLogger;
@@ -9,18 +11,23 @@ describe('Peaks.segments', function() {
   beforeEach(function(done) {
     deprecationLogger = sinon.spy();
 
-    p = Peaks.init({
-      container: document.getElementById('waveform-visualiser-container'),
-      mediaElement: document.querySelector('audio'),
+    var options = {
+      containers: {
+        overview: document.getElementById('overview-container'),
+        zoomview: document.getElementById('zoomview-container')
+      },
+      mediaElement: document.getElementById('media'),
       dataUri: {
         json: 'base/test_data/sample.json'
       },
-      keyboard: true,
-      height: 240,
       deprecationLogger: deprecationLogger
-    });
+    };
 
-    p.on('peaks.ready', done);
+    Peaks.init(options, function(err, instance) {
+      expect(err).to.equal(null);
+      p = instance;
+      done();
+    });
   });
 
   afterEach(function() {
@@ -88,17 +95,10 @@ describe('Peaks.segments', function() {
       expect(deprecationLogger).to.not.have.been.called;
     });
 
-    it('should accept a list of properties for a single segment (deprecated)', function() {
-      p.segments.add(0, 10);
-
-      var segments = p.segments.getSegments();
-
-      expect(segments).to.have.lengthOf(1);
-      expect(segments[0]).to.be.an.instanceOf(Segment);
-      expect(segments[0].startTime).to.equal(0);
-      expect(segments[0].endTime).to.equal(10);
-
-      expect(deprecationLogger).to.have.been.calledOnce;
+    it('should should throw if the argument is not an object', function() {
+      expect(function() {
+        p.segments.add(0, 10);
+      }).to.throw(TypeError);
     });
 
     it('should throw an exception if the startTime argument is missing', function() {
@@ -161,8 +161,10 @@ describe('Peaks.segments', function() {
       p.segments.add(segments);
 
       expect(p.segments.getSegments()).to.have.lengthOf(2);
-      expect(p.segments.getSegments()[0]).to.include.keys('startTime', 'endTime');
-      expect(p.segments.getSegments()[1]).to.include.keys('startTime', 'endTime');
+      expect(p.segments.getSegments()[0].startTime).to.equal(0);
+      expect(p.segments.getSegments()[0].endTime).to.equal(10);
+      expect(p.segments.getSegments()[1].startTime).to.equal(5);
+      expect(p.segments.getSegments()[1].endTime).to.equal(10);
     });
 
     it('should emit an event with an array containing a single segment object', function(done) {
@@ -241,7 +243,7 @@ describe('Peaks.segments', function() {
       expect(segments[0].id).to.equal('segment1');
     });
 
-    it('should add segment atomically', function() {
+    it('should add segments atomically', function() {
       p.segments.add([
         { startTime: 0,  endTime: 10 },
         { startTime: 10, endTime: 20 },
@@ -269,6 +271,49 @@ describe('Peaks.segments', function() {
       expect(segments[1].endTime).to.equal(20);
       expect(segments[2].startTime).to.equal(20);
       expect(segments[2].endTime).to.equal(30);
+    });
+  });
+
+  describe('getSegmentsAtTime', function() {
+    beforeEach(function() {
+      p.segments.add({ startTime: 10, endTime: 12, id: 'segment1' });
+      p.segments.add({ startTime: 13, endTime: 15, id: 'segment2' });
+      p.segments.add({ startTime: 16, endTime: 18, id: 'segment3' });
+      p.segments.add({ startTime: 17, endTime: 19, id: 'segment4' });
+    });
+
+    it('should return an empty array if no overlapping segments', function() {
+      var segments = p.segments.getSegmentsAtTime(5);
+      expect(segments).to.be.an.instanceOf(Array);
+      expect(segments).to.have.lengthOf(0);
+    });
+
+    it('should return segment with time at the start of the segment', function() {
+      var segments = p.segments.getSegmentsAtTime(10);
+      expect(segments).to.be.an.instanceOf(Array);
+      expect(segments).to.have.lengthOf(1);
+      expect(segments[0].id).to.equal('segment1');
+    });
+
+    it('should not return segment with time at the end of the segment', function() {
+      var segments = p.segments.getSegmentsAtTime(12);
+      expect(segments).to.be.an.instanceOf(Array);
+      expect(segments).to.have.lengthOf(0);
+    });
+
+    it('should return segment with time within the segment', function() {
+      var segments = p.segments.getSegmentsAtTime(11);
+      expect(segments).to.be.an.instanceOf(Array);
+      expect(segments).to.have.lengthOf(1);
+      expect(segments[0].id).to.equal('segment1');
+    });
+
+    it('should return all overlapping segments', function() {
+      var segments = p.segments.getSegmentsAtTime(17);
+      expect(segments).to.be.an.instanceOf(Array);
+      expect(segments).to.have.lengthOf(2);
+      expect(segments[0].id).to.equal('segment3');
+      expect(segments[1].id).to.equal('segment4');
     });
   });
 

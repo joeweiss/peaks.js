@@ -3,45 +3,47 @@
  *
  * Defines the {@link Peaks} class.
  *
- * @module peaks/main
+ * @module main
  */
 
-define('peaks', [
+define([
   'colors.css',
-  'EventEmitter',
-  'peaks/markers/waveform.points',
-  'peaks/markers/waveform.segments',
-  'peaks/player/player',
-  'peaks/views/waveform.timecontroller',
-  'peaks/views/waveform.zoomcontroller',
-  'peaks/waveform/waveform.core',
-  'peaks/waveform/waveform.mixins',
-  'peaks/waveform/waveform.utils',
-  'peaks/player/player.keyboard'
+  'eventemitter2',
+  './cue-emitter',
+  './waveform-points',
+  './waveform-segments',
+  './keyboard-handler',
+  './player',
+  './marker-factories',
+  './view-controller',
+  './zoom-controller',
+  './waveform-builder',
+  './utils'
   ], function(
     Colors,
     EventEmitter,
+    CueEmitter,
     WaveformPoints,
     WaveformSegments,
+    KeyboardHandler,
     Player,
-    TimeController,
+    MarkerFactories,
+    ViewController,
     ZoomController,
-    Waveform,
-    mixins,
-    Utils,
-    KeyboardHandler) {
+    WaveformBuilder,
+    Utils) {
   'use strict';
 
   function buildUi(container) {
     return {
       player:   container.querySelector('.waveform'),
-      zoom:     container.querySelector('.zoom-container'),
+      zoomview: container.querySelector('.zoom-container'),
       overview: container.querySelector('.overview-container')
     };
   }
 
   /**
-   * Creates and initialises a new Peaks instance with the given options.
+   * Initialises a new Peaks instance with default option settings.
    *
    * @class
    * @alias Peaks
@@ -49,10 +51,8 @@ define('peaks', [
    * @param {Object} opts Configuration options
    */
 
-  function Peaks(opts) {
+  function Peaks() {
     EventEmitter.call(this, { wildcard: true });
-
-    opts = opts || {};
 
     this.options = {
 
@@ -105,6 +105,20 @@ define('peaks', [
       withCredentials: false,
 
       /**
+       * Pre-fetched / local waveform data to build the waveforms with
+       *
+       * Only one source is required
+       *
+       * ```js
+       * waveformData: {
+       *   arraybuffer: ArrayBuffer,
+       *   json: Object
+       * }
+       * ```
+       */
+      waveformData:               null,
+
+      /**
        * Will report errors to that function
        *
        * @type {Function=}
@@ -132,14 +146,14 @@ define('peaks', [
       nudgeIncrement: 1.0,
 
       /**
-       * Colour for the in marker of segments
+       * Colour for segment start marker handles
        */
-      inMarkerColor:         Colors.gray,
+      segmentStartMarkerColor: Colors.gray,
 
       /**
-       * Colour for the out marker of segments
+       * Colour for segment end marker handles
        */
-      outMarkerColor:        Colors.gray,
+      segmentEndMarkerColor: Colors.gray,
 
       /**
        * Colour for the zoomed in waveform
@@ -155,7 +169,13 @@ define('peaks', [
        * Colour for the overview waveform highlight rectangle, which shows
        * you what you see in the zoom view.
        */
-      overviewHighlightRectangleColor: 'grey',
+      overviewHighlightColor: 'grey',
+
+      /**
+       * The default number of pixels from the top and bottom of the canvas
+       * that the overviewHighlight takes up
+       */
+      overviewHighlightOffset: 11,
 
       /**
        * Random colour per segment (overrides segmentColor)
@@ -214,43 +234,31 @@ define('peaks', [
       pointMarkerColor:     Colors.teal,
 
       /**
-       * Handler function called when point handle double clicked
+       * An object containing an AudioContext, used when creating waveform data
+       * using the Web Audio API
        */
-      pointDblClickHandler: null,
 
-      /*
-       * Handler function called when the point handle has finished dragging
-       */
-      pointDragEndHandler:  null,
-
-      /**
-       * An AudioContext, used when creating waveform data using the Web Audio API
-       */
-      audioContext: null,
-
-      /**
-       * WaveformData WebAudio Decoder Options
-       *
-       * You mostly want to play with the 'scale' option.
-       *
-       * @see https://github.com/bbc/waveform-data.js/blob/master/lib/builders/webaudio.js
-       */
-      waveformBuilderOptions: {
-        scale: 512,
-        amplitude_scale: 1.0
-      },
+      webAudio: null,
 
       /**
        * Use animation on zoom
        */
-      zoomAdapter: 'static'
-    };
+      zoomAdapter: 'static',
 
-    /**
-     *
-     * @type {HTMLElement}
-     */
-    this.container = opts.container;
+      /**
+       * Emit cue events
+       */
+      emitCueEvents: false,
+
+      /**
+       * Point/Segment marker customisation.
+       *
+       * @todo This part of the API is not stable.
+       */
+      createSegmentMarker: MarkerFactories.createSegmentMarker,
+      createSegmentLabel:  MarkerFactories.createSegmentLabel,
+      createPointMarker:   MarkerFactories.createPointMarker
+    };
 
     /**
      * Asynchronous errors logger.
@@ -260,132 +268,10 @@ define('peaks', [
     // eslint-disable-next-line no-console
     this.logger = console.error.bind(console);
 
-    // eslint-disable-next-line no-console
-    opts.deprecationLogger = opts.deprecationLogger || console.log.bind(console);
-
-    if (opts.audioElement) {
-      opts.mediaElement = opts.audioElement;
-        // eslint-disable-next-line max-len
-      opts.deprecationLogger('Peaks.init(): the audioElement option is deprecated, please use mediaElement instead');
-    }
-
-    if (!opts.mediaElement) {
-      throw new Error('Peaks.init(): Missing mediaElement option');
-    }
-
-    if (!(opts.mediaElement instanceof HTMLMediaElement)) {
-      // eslint-disable-next-line max-len
-      throw new TypeError('Peaks.init(): The mediaElement option should be an HTMLMediaElement');
-    }
-
-    if (!opts.container) {
-      throw new Error('Peaks.init(): Missing container option');
-    }
-
-    if ((opts.container.clientWidth > 0) === false) {
-      // eslint-disable-next-line max-len
-      throw new TypeError('Peaks.init(): Please ensure that the container has a width');
-    }
-
-    if (opts.logger && !Utils.isFunction(opts.logger)) {
-      // eslint-disable-next-line max-len
-      throw new TypeError('Peaks.init(): The logger option should be a function');
-    }
-
-    Utils.extend(this.options, opts);
-    Utils.extend(this.options, {
-      createSegmentMarker: mixins.createSegmentMarker,
-      createSegmentLabel:  mixins.createSegmentLabel,
-      createPointMarker:   mixins.createPointMarker
-    });
-
-    if (!Array.isArray(this.options.zoomLevels)) {
-      throw new TypeError('Peaks.init(): The zoomLevels option should be an array');
-    }
-    else if (this.options.zoomLevels.length === 0) {
-      throw new Error('Peaks.init(): The zoomLevels array must not be empty');
-    }
-    else {
-      if (!Utils.isInAscendingOrder(this.options.zoomLevels)) {
-        throw new Error('Peaks.init(): The zoomLevels array must be sorted in ascending order');
-      }
-    }
-
-    if (this.options.pointDblClickHandler) {
-      opts.deprecationLogger('Peaks.init(): The pointDblClickHandler option is deprecated, please use the points.dblclick event instead');
-      this.on('points.dblclick', this.options.pointDblClickHandler);
-    }
-
-    if (this.options.pointDragEndHandler) {
-      opts.deprecationLogger('Peaks.init(): The pointDragEndHandler option is deprecated, please use the points.dragend event instead');
-      this.on('points.dragend', this.options.pointDragEndHandler);
-    }
-
-    /*
-     Setup the logger
-     */
-    if (opts.logger) {
-      this.logger = opts.logger;
-    }
-
-    this.on('error', this.logger.bind(null));
-
-    /*
-     Setup the layout
-     */
-    if (typeof this.options.template === 'string') {
-      this.container.innerHTML = this.options.template;
-    }
-    else if (this.options.template instanceof HTMLElement) {
-      this.container.appendChild(this.options.template);
-    }
-    else {
-      // eslint-disable-next-line max-len
-      throw new TypeError('Peaks.init(): The template option must be a valid HTML string or a DOM object');
-    }
-
-    if (this.options.keyboard) {
-      this.keyboardHandler = new KeyboardHandler(this);
-    }
-
-    this.player = new Player(this, this.options.mediaElement);
-
-    this.segments = new WaveformSegments(this);
-    this.points = new WaveformPoints(this);
-
-    /*
-     Setup the UI components
-     */
-    this.waveform = new Waveform(this);
-    this.waveform.init(buildUi(this.container));
-
-    this.zoom = new ZoomController(this, this.options.zoomLevels);
-    this.time = new TimeController(this);
-
-    var self = this;
-
-    this.on('peaks.ready', function() {
-      if (self.options.segments) {
-        if (!Array.isArray(self.options.segments)) {
-          // eslint-disable-next-line max-len
-          throw new TypeError('Peaks.init(): options.segments must be an array of segment objects');
-        }
-
-        self.segments.add(self.options.segments);
-      }
-
-      if (self.options.points) {
-        if (!Array.isArray(self.options.points)) {
-          // eslint-disable-next-line max-len
-          throw new TypeError('Peaks.init(): options.points must be an array of point objects');
-        }
-
-        self.points.add(self.options.points);
-      }
-    });
-
     return this;
   }
+
+  Peaks.prototype = Object.create(EventEmitter.prototype);
 
   /**
    * Creates and initialises a new Peaks instance with the given options.
@@ -395,20 +281,362 @@ define('peaks', [
    * @return {Peaks}
    */
 
-  Peaks.init = function(opts) {
-    return new Peaks(opts);
+  Peaks.init = function(opts, callback) {
+    var instance = new Peaks();
+
+    opts = opts || {};
+
+    var err = instance._setOptions(opts);
+
+    if (err) {
+      callback(err);
+      return;
+    }
+
+    /*
+     Setup the layout
+     */
+
+    var containers = null;
+
+    if (typeof instance.options.template === 'string') {
+      opts.container.innerHTML = instance.options.template;
+
+      containers = buildUi(instance.options.container);
+    }
+    else if (Utils.isHTMLElement(instance.options.template)) {
+      this.container.appendChild(instance.options.template);
+
+      containers = buildUi(instance.options.container);
+    }
+    else if (instance.options.containers) {
+      containers = instance.options.containers;
+    }
+    else {
+      // eslint-disable-next-line max-len
+      callback(new TypeError('Peaks.init(): The template option must be a valid HTML string or a DOM object'));
+      return;
+    }
+
+    var zoomviewContainer = containers.zoomview || containers.zoom;
+
+    if (!Utils.isHTMLElement(zoomviewContainer) &&
+        !Utils.isHTMLElement(containers.overview)) {
+      // eslint-disable-next-line max-len
+      callback(new TypeError('Peaks.init(): The containers.zoomview and/or containers.overview options must be valid HTML elements'));
+      return;
+    }
+
+    if (zoomviewContainer && zoomviewContainer.clientWidth <= 0) {
+      // eslint-disable-next-line max-len
+      callback(new TypeError('Peaks.init(): Please ensure that the zoomview container is visible and has non-zero width'));
+      return;
+    }
+
+    if (containers.overview && containers.overview.clientWidth <= 0) {
+      // eslint-disable-next-line max-len
+      callback(new TypeError('Peaks.init(): Please ensure that the overview container is visible and has non-zero width'));
+      return;
+    }
+
+    if (instance.options.keyboard) {
+      instance._keyboardHandler = new KeyboardHandler(instance);
+    }
+
+    instance.player = new Player(instance, instance.options.mediaElement);
+    instance.segments = new WaveformSegments(instance);
+    instance.points = new WaveformPoints(instance);
+    instance.zoom = new ZoomController(instance, instance.options.zoomLevels);
+    instance.views = new ViewController(instance);
+
+    // Setup the UI components
+    var waveformBuilder = new WaveformBuilder(instance);
+
+    waveformBuilder.init(instance.options, function(err, waveformData) {
+      if (err) {
+        if (callback) {
+          callback(err);
+        }
+
+        return;
+      }
+
+      instance._waveformData = waveformData;
+
+      if (containers.overview) {
+        instance.views.createOverview(containers.overview);
+      }
+
+      if (zoomviewContainer) {
+        instance.views.createZoomview(zoomviewContainer);
+      }
+
+      instance._addWindowResizeHandler();
+
+      if (instance.options.segments) {
+        instance.segments.add(instance.options.segments);
+      }
+
+      if (instance.options.points) {
+        instance.points.add(instance.options.points);
+      }
+
+      if (instance.options.emitCueEvents) {
+        instance._cueEmitter = new CueEmitter(instance);
+      }
+
+      // Allow applications to attach event handlers before emitting events,
+      // when initialising with local waveform data.
+
+      setTimeout(function() {
+        instance.emit('peaks.ready');
+      }, 0);
+
+      if (callback) {
+        callback(null, instance);
+      }
+    });
+
+    return instance;
   };
 
-  Peaks.prototype = Object.create(EventEmitter.prototype);
+  Peaks.prototype._setOptions = function(opts) {
+    // eslint-disable-next-line no-console
+    opts.deprecationLogger = opts.deprecationLogger || console.log.bind(console);
+
+    if (opts.audioElement) {
+      opts.mediaElement = opts.audioElement;
+        // eslint-disable-next-line max-len
+      opts.deprecationLogger('Peaks.init(): The audioElement option is deprecated, please use mediaElement instead');
+    }
+
+    if (opts.overviewHighlightRectangleColor) {
+      opts.overviewHighlightColor = opts.overviewHighlightRectangleColor;
+      // eslint-disable-next-line max-len
+      opts.deprecationLogger('Peaks.init(): The overviewHighlightRectangleColor option is deprecated, please use overviewHighlightColor instead');
+    }
+
+    if (opts.inMarkerColor) {
+      opts.segmentStartMarkerColor = opts.inMarkerColor;
+      // eslint-disable-next-line max-len
+      opts.deprecationLogger('Peaks.init(): The inMarkerColor option is deprecated, please use segmentStartMarkerColor instead');
+    }
+
+    if (opts.outMarkerColor) {
+      opts.segmentEndMarkerColor = opts.outMarkerColor;
+      // eslint-disable-next-line max-len
+      opts.deprecationLogger('Peaks.init(): The outMarkerColor option is deprecated, please use segmentEndMarkerColor instead');
+    }
+
+    if (!opts.mediaElement) {
+      return new Error('Peaks.init(): Missing mediaElement option');
+    }
+
+    if (!(opts.mediaElement instanceof HTMLMediaElement)) {
+      // eslint-disable-next-line max-len
+      return new TypeError('Peaks.init(): The mediaElement option should be an HTMLMediaElement');
+    }
+
+    if (!opts.container && !opts.containers) {
+      // eslint-disable-next-line max-len
+      return new Error('Peaks.init(): Please specify either a container or containers option');
+    }
+    else if (Boolean(opts.container) === Boolean(opts.containers)) {
+      // eslint-disable-next-line max-len
+      return new Error('Peaks.init(): Please specify either a container or containers option, but not both');
+    }
+
+    if (opts.template && opts.containers) {
+      // eslint-disable-next-line max-len
+      return new Error('Peaks.init(): Please specify either a template or a containers option, but not both');
+    }
+
+    // The 'containers' option overrides 'template'.
+    if (opts.containers) {
+      opts.template = null;
+    }
+
+    if (opts.logger && !Utils.isFunction(opts.logger)) {
+      // eslint-disable-next-line max-len
+      return new TypeError('Peaks.init(): The logger option should be a function');
+    }
+
+    if (opts.segments && !Array.isArray(opts.segments)) {
+      // eslint-disable-next-line max-len
+      return new TypeError('Peaks.init(): options.segments must be an array of segment objects');
+    }
+
+    if (opts.points && !Array.isArray(opts.points)) {
+      // eslint-disable-next-line max-len
+      return new TypeError('Peaks.init(): options.points must be an array of point objects');
+    }
+
+    Utils.extend(this.options, opts);
+
+    if (!Array.isArray(this.options.zoomLevels)) {
+      return new TypeError('Peaks.init(): The zoomLevels option should be an array');
+    }
+    else if (this.options.zoomLevels.length === 0) {
+      return new Error('Peaks.init(): The zoomLevels array must not be empty');
+    }
+    else {
+      if (!Utils.isInAscendingOrder(this.options.zoomLevels)) {
+        return new Error('Peaks.init(): The zoomLevels array must be sorted in ascending order');
+      }
+    }
+
+    if (opts.logger) {
+      this.logger = opts.logger;
+    }
+
+    return null;
+  };
+
+  /**
+   * Remote waveform data options for [Peaks.setSource]{@link Peaks#setSource}.
+   *
+   * @typedef {Object} RemoteWaveformDataOptions
+   * @global
+   * @property {String=} arraybuffer
+   * @property {String=} json
+   */
+
+  /**
+   * Local waveform data options for [Peaks.setSource]{@link Peaks#setSource}.
+   *
+   * @typedef {Object} LocalWaveformDataOptions
+   * @global
+   * @property {ArrayBuffer=} arraybuffer
+   * @property {Object=} json
+   */
+
+  /**
+   * Web Audio options for [Peaks.setSource]{@link Peaks#setSource}.
+   *
+   * @typedef {Object} WebAudioOptions
+   * @global
+   * @property {AudioContext} audioContext
+   * @property {AudioBuffer=} audioBuffer
+   * @property {Boolean=} multiChannel
+   */
+
+  /**
+   * Options for [Peaks.setSource]{@link Peaks#setSource}.
+   *
+   * @typedef {Object} PeaksSetSourceOptions
+   * @global
+   * @property {String} mediaUrl
+   * @property {RemoteWaveformDataOptions=} dataUri
+   * @property {LocalWaveformDataOptions=} waveformData
+   * @property {WebAudioOptions=} webAudio
+   * @property {Boolean=} withCredentials
+   * @property {Array<Number>=} zoomLevels
+   */
+
+  /**
+   * Changes the audio or video media source associated with the {@link Peaks}
+   * instance.
+   *
+   * @param {PeaksSetSourceOptions} options
+   * @param {Function} callback
+   */
+
+  Peaks.prototype.setSource = function(options, callback) {
+    var self = this;
+
+    if (!options.mediaUrl) {
+      callback(new Error('peaks.setSource(): options must contain a mediaUrl'));
+      return;
+    }
+
+    function reset() {
+      self.removeAllListeners('player_canplay');
+      self.removeAllListeners('player_error');
+    }
+
+    function playerErrorHandler(err) {
+      reset();
+
+      // Return the MediaError object from the media element
+      callback(err);
+    }
+
+    function playerCanPlayHandler() {
+      reset();
+
+      if (!options.zoomLevels) {
+        options.zoomLevels = self.options.zoomLevels;
+      }
+
+      var waveformBuilder = new WaveformBuilder(self);
+
+      waveformBuilder.init(options, function(err, waveformData) {
+        if (err) {
+          callback(err);
+          return;
+        }
+
+        self._waveformData = waveformData;
+
+        ['overview', 'zoomview'].forEach(function(viewName) {
+          var view = self.views.getView(viewName);
+
+          if (view) {
+            view.setWaveformData(waveformData);
+          }
+        });
+
+        self.zoom.setZoomLevels(options.zoomLevels);
+
+        callback();
+      });
+    }
+
+    self.once('player_canplay', playerCanPlayHandler);
+    self.once('player_error', playerErrorHandler);
+
+    self.player.setSource(options.mediaUrl);
+  };
+
+  Peaks.prototype.getWaveformData = function() {
+    return this._waveformData;
+  };
+
+  Peaks.prototype._addWindowResizeHandler = function() {
+    this._onResize = this._onResize.bind(this);
+    window.addEventListener('resize', this._onResize);
+  };
+
+  Peaks.prototype._onResize = function() {
+    this.emit('window_resize');
+  };
+
+  Peaks.prototype._removeWindowResizeHandler = function() {
+    window.removeEventListener('resize', this._onResize);
+  };
 
   /**
    * Cleans up a Peaks instance after use.
    */
 
   Peaks.prototype.destroy = function() {
-    this.removeAllListeners();
-    this.waveform.destroy();
-    this.player.destroy();
+    this._removeWindowResizeHandler();
+
+    if (this._keyboardHandler) {
+      this._keyboardHandler.destroy();
+    }
+
+    if (this.views) {
+      this.views.destroy();
+    }
+
+    if (this.player) {
+      this.player.destroy();
+    }
+
+    if (this._cueEmitter) {
+      this._cueEmitter.destroy();
+    }
   };
 
   return Peaks;

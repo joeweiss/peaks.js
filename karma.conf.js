@@ -1,4 +1,7 @@
 'use strict';
+/* eslint-env node */
+
+var istanbul = require('browserify-istanbul');
 
 function filterBrowsers(browsers, re) {
   return Object.keys(browsers).filter(function(key) {
@@ -8,6 +11,7 @@ function filterBrowsers(browsers, re) {
 
 module.exports = function(config) {
   var isCI = Boolean(process.env.CI) && Boolean(process.env.BROWSER_STACK_ACCESS_KEY);
+  var glob = config.glob || '**/*.js';
 
   // Karma configuration
   config.set({
@@ -15,20 +19,25 @@ module.exports = function(config) {
     // defined in 'files' and 'exclude'.
     basePath: '',
 
-    frameworks: ['mocha', 'chai-sinon', 'browserify'],
+    frameworks: ['browserify', 'mocha', 'chai-sinon'],
 
     client: {
       chai: {
         includeStack: true
       },
       mocha: {
-        timeout: 5000
+        timeout: 10000
       }
     },
 
     browserify: {
       debug: true,
       transform: [
+        istanbul({
+          ignore: [
+            'test/unit/*.js'
+          ]
+        }),
         'deamdify'
       ]
     },
@@ -37,10 +46,7 @@ module.exports = function(config) {
     files: [
       { pattern: 'test/test_img/*', included: false },
       { pattern: 'test_data/*', included: false },
-      { pattern: 'test_data/sample.{dat,json}', included: false, served: true },
-      { pattern: 'test/*.html', included: true },
-      { pattern: 'test/load-fixtures.js', included: true },
-      { pattern: 'test/unit/**/*.js', included: true }
+      { pattern: 'test/unit/' + glob, included: true }
     ],
 
     mime: {
@@ -48,13 +54,21 @@ module.exports = function(config) {
     },
 
     preprocessors: {
-      'test/unit/**/*.js': ['browserify'],
-      'test/*.html': ['html2js']
+      'test/unit/*.js': ['browserify']
     },
 
     // test results reporter to use
     // possible values: dots || progress || growl || spec
-    reporters: 'spec',
+    reporters: ['spec', 'coverage'],
+
+    // configure the test coverage reporter
+    coverageReporter: {
+      reporters: [
+        { type: 'html', dir: 'coverage', subdir: '.' },
+        { type: 'text' },
+        { type: 'text-summary' }
+      ]
+    },
 
     // web server port
     port: 8080,

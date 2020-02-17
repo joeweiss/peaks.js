@@ -1,205 +1,697 @@
 'use strict';
 
+require('./setup');
+
 var Peaks = require('../../src/main');
+var WaveformData = require('waveform-data');
 
 var TestAudioContext = window.AudioContext || window.mozAudioContext || window.webkitAudioContext;
 
 describe('Peaks', function() {
-  var p;
+  var p = null;
 
   afterEach(function() {
     if (p) {
       p.destroy();
+      p = null;
     }
   });
 
   describe('init', function() {
     context('with valid options', function() {
-      it('should emit peaks.ready and segments.ready events when initialised', function(done) {
+      it('should emit a peaks.ready event when initialised', function(done) {
         p = Peaks.init({
-          container: document.getElementById('waveform-visualiser-container'),
-          mediaElement: document.querySelector('audio'),
-          dataUri: { arraybuffer: 'base/test_data/sample.dat' }
+          containers: {
+            overview: document.getElementById('overview-container'),
+            zoomview: document.getElementById('zoomview-container')
+          },
+          mediaElement: document.getElementById('media'),
+          dataUri: { arraybuffer: '/base/test_data/sample.dat' }
         });
 
-        var segmentsReady = false;
-        var peaksReady = false;
-
-        function readyHandler() {
-          if (peaksReady && segmentsReady) {
-            done();
-          }
-        }
+        expect(p).to.be.an.instanceOf(Peaks);
 
         p.on('peaks.ready', function() {
-          peaksReady = true;
-          readyHandler();
+          expect(p.getWaveformData()).to.be.an.instanceOf(WaveformData);
+          done();
+        });
+      });
+
+      it('should invoke callback when initialised', function(done) {
+        Peaks.init({
+          containers: {
+            overview: document.getElementById('overview-container'),
+            zoomview: document.getElementById('zoomview-container')
+          },
+          mediaElement: document.getElementById('media'),
+          dataUri: { arraybuffer: '/base/test_data/sample.dat' }
+        },
+        function(err, instance) {
+          expect(err).to.equal(null);
+          expect(instance).to.be.an.instanceOf(Peaks);
+          instance.destroy();
+          done();
+        });
+      });
+
+      context('with containers option', function() {
+        it('should construct a Peaks object with overview and zoomable waveforms', function(done) {
+          p = Peaks.init({
+            containers: {
+              overview: document.getElementById('overview-container'),
+              zoomview: document.getElementById('zoomview-container')
+            },
+            mediaElement: document.getElementById('media'),
+            dataUri: { arraybuffer: '/base/test_data/sample.dat' }
+          });
+
+          expect(p).to.be.an.instanceof(Peaks);
+
+          p.on('peaks.ready', function() {
+            done();
+          });
         });
 
-        // TODO: The segments.ready event is deprecated.
-        p.on('segments.ready', function() {
-          segmentsReady = true;
-          readyHandler();
+        it('should construct a Peaks object with an overview waveform only', function(done) {
+          p = Peaks.init({
+            containers: {
+              overview: document.getElementById('overview-container')
+            },
+            mediaElement: document.getElementById('media'),
+            dataUri: { arraybuffer: '/base/test_data/sample.dat' }
+          });
+
+          expect(p).to.be.an.instanceof(Peaks);
+
+          p.on('peaks.ready', function() {
+            done();
+          });
+        });
+
+        it('should construct a Peaks object with a zoomable waveform only', function(done) {
+          p = Peaks.init({
+            containers: {
+              zoomview: document.getElementById('zoomview-container')
+            },
+            mediaElement: document.getElementById('media'),
+            dataUri: { arraybuffer: '/base/test_data/sample.dat' }
+          });
+
+          expect(p).to.be.an.instanceof(Peaks);
+
+          p.on('peaks.ready', function() {
+            done();
+          });
+        });
+
+        it('should return an error if no containers are given', function(done) {
+          Peaks.init({
+            containers: {
+            },
+            mediaElement: document.getElementById('media'),
+            dataUri: { arraybuffer: '/base/test_data/sample.dat' }
+          }, function(err, instance) {
+            expect(err).to.be.an.instanceOf(TypeError);
+            expect(err.message).to.match(/must be valid HTML elements/);
+            expect(instance).to.equal(undefined);
+            done();
+          });
+        });
+      });
+
+      context('with precomputed stereo waveform data', function() {
+        it('should initialise correctly', function(done) {
+          Peaks.init({
+            containers: {
+              overview: document.getElementById('overview-container'),
+              zoomview: document.getElementById('zoomview-container')
+            },
+            mediaElement: document.getElementById('media'),
+            dataUri: { arraybuffer: '/base/test_data/07023003-2channel.dat' }
+          }, function(err, instance) {
+            expect(err).to.equal(null);
+            expect(instance).to.be.an.instanceOf(Peaks);
+            expect(instance.getWaveformData().channels).to.equal(2);
+            instance.destroy();
+            done();
+          });
+        });
+      });
+
+      context('with valid json waveform data', function() {
+        it('should initialise correctly', function(done) {
+          var sampleJsonData = require('../../test_data/sample.json');
+          Peaks.init({
+            containers: {
+              overview: document.getElementById('overview-container'),
+              zoomview: document.getElementById('zoomview-container')
+            },
+            mediaElement: document.getElementById('media'),
+            waveformData: {
+              json: sampleJsonData
+            }
+          }, function(err, instance) {
+            expect(err).to.equal(null);
+            expect(instance).to.be.an.instanceOf(Peaks);
+            expect(instance.getWaveformData().channels).to.equal(1);
+            instance.destroy();
+            done();
+          });
+        });
+      });
+
+      context('with valid binary waveform data', function() {
+        it('should initialise correctly', function(done) {
+          fetch('/base/test_data/sample.dat')
+            .then(function(response) {
+              return response.arrayBuffer();
+            })
+            .then(function(buffer) {
+              Peaks.init({
+                containers: {
+                  overview: document.getElementById('overview-container'),
+                  zoomview: document.getElementById('zoomview-container')
+                },
+                mediaElement: document.getElementById('media'),
+                waveformData: {
+                  arraybuffer: buffer
+                }
+              }, function(err, instance) {
+                expect(err).to.equal(null);
+                expect(instance).to.be.an.instanceOf(Peaks);
+                expect(instance.getWaveformData().channels).to.equal(1);
+                instance.destroy();
+                done();
+              });
+            });
+        });
+      });
+
+      context('with audioContext and multiChannel enabled', function() {
+        it('should initialise correctly', function(done) {
+          Peaks.init({
+            containers: {
+              overview: document.getElementById('overview-container'),
+              zoomview: document.getElementById('zoomview-container')
+            },
+            mediaElement: document.getElementById('media'),
+            webAudio: {
+              audioContext: new TestAudioContext(),
+              multiChannel: true
+            }
+          }, function(err, instance) {
+            expect(err).to.equal(null);
+            expect(instance).to.be.an.instanceOf(Peaks);
+            expect(instance.getWaveformData().channels).to.equal(2);
+            instance.destroy();
+            done();
+          });
+        });
+      });
+
+      context('with audioBuffer', function() {
+        it('should initialise correctly', function(done) {
+          var audioContext = new TestAudioContext();
+
+          fetch('/base/test_data/sample.mp3')
+            .then(function(response) {
+              return response.arrayBuffer();
+            })
+            .then(function(buffer) {
+              return audioContext.decodeAudioData(buffer);
+            })
+            .then(function(audioBuffer) {
+              Peaks.init({
+                containers: {
+                  overview: document.getElementById('overview-container'),
+                  zoomview: document.getElementById('zoomview-container')
+                },
+                mediaElement: document.getElementById('media'),
+                webAudio: {
+                  audioBuffer: audioBuffer,
+                  multiChannel: true
+                },
+                zoomLevels: [128, 256]
+              }, function(err, instance) {
+                expect(err).to.equal(null);
+                expect(instance).to.be.an.instanceOf(Peaks);
+                expect(instance.getWaveformData().channels).to.equal(2);
+                instance.destroy();
+                done();
+              });
+            });
         });
       });
     });
 
     context('with invalid options', function() {
-      it('should throw an exception if no mediaElement is provided', function() {
-        expect(function() {
+      it('should invoke callback with an error if no mediaElement is provided', function(done) {
           Peaks.init({
-            container: document.getElementById('waveform-visualiser-container'),
-            dataUri: { arraybuffer: 'base/test_data/sample.dat' }
+            containers: {
+              overview: document.getElementById('overview-container'),
+              zoomview: document.getElementById('zoomview-container')
+            },
+            dataUri: { arraybuffer: '/base/test_data/sample.dat' }
+          }, function(err, instance) {
+            expect(err).to.be.an.instanceOf(Error);
+            expect(err.message).to.match(/Missing mediaElement option/);
+            expect(instance).to.equal(undefined);
+            done();
           });
-        }).to.throw(/Missing mediaElement option/);
       });
 
-      it('should throw an exception if mediaElement is not an HTMLMediaElement', function() {
-        expect(function() {
-          Peaks.init({
-            container: document.getElementById('waveform-visualiser-container'),
-            mediaElement: document.createElement('div'),
-            dataUri: { arraybuffer: 'base/test_data/sample.dat' }
-          });
-        }).to.throw(/HTMLMediaElement/);
-      });
-
-      it('should throw an exception if both a dataUri and audioContext are provided', function() {
-        expect(function() {
-          Peaks.init({
-            container: document.getElementById('waveform-visualiser-container'),
-            mediaElement: document.getElementById('audioElement'),
-            dataUri: { arraybuffer: 'base/test_data/sample.dat' },
-            audioContext: new TestAudioContext()
-          });
-        }).to.throw(/not both/);
-      });
-
-      it('should throw an exception if neither a dataUri nor an audioContext are provided', function() {
-        expect(function() {
-          Peaks.init({
-            container: document.getElementById('waveform-visualiser-container'),
-            mediaElement: document.getElementById('audioElement')
-          });
-        }).to.throw(/audioContext or dataUri/);
-      });
-
-      it('should throw an exception if the dataUri is not an object', function() {
-        expect(function() {
-          Peaks.init({
-            container: document.getElementById('waveform-visualiser-container'),
-            mediaElement: document.getElementById('audioElement'),
-            dataUri: true
-          });
-        }).to.throw(/dataUri/);
-      });
-
-      it('should throw an exception if no container is provided', function() {
-        expect(function() {
-          Peaks.init({
-            mediaElement: document.querySelector('audio'),
-            dataUri: { arraybuffer: 'base/test_data/sample.dat' }
-          });
-        }).to.throw(/Missing container option/);
-      });
-
-      it('should throw an exception if the container has no layout', function() {
-        expect(function() {
-          Peaks.init({
-            container: document.createElement('div'),
-            mediaElement: document.querySelector('audio'),
-            dataUri: { arraybuffer: 'base/test_data/sample.dat' }
-          });
-        }).to.throw(/width/);
-      });
-
-      it('should throw an exception if the template is not a string or an HTMLElement', function() {
-        expect(function() {
-          Peaks.init({
-            container: document.getElementById('waveform-visualiser-container'),
-            mediaElement: document.querySelector('audio'),
-            dataUri: { arraybuffer: 'base/test_data/sample.dat' },
-            template: null
-          });
-        }).to.throw(/template/);
-      });
-
-      it('should throw an exception if the logger is defined and not a function', function() {
-        expect(function() {
-          Peaks.init({
-            container: document.getElementById('waveform-visualiser-container'),
-            mediaElement: document.querySelector('audio'),
-            dataUri: 'base/test_data/sample.json',
-            logger: 'foo'
-          });
-        }).to.throw(/logger/);
-      });
-
-      it('should report errors to a configurable logger', function(done) {
-        var logger = sinon.spy();
-
-        p = Peaks.init({
-          container: document.getElementById('waveform-visualiser-container'),
-          mediaElement: document.querySelector('audio'),
-          dataUri: 'base/test_data/sample.json',
-          logger: logger
-        });
-
-        p.emit('error', new Error('Expected to be logged.'));
-
-        setTimeout(function() {
-          expect(p.logger).to.have.been.calledOnce;
+      it('should invoke callback with an error if mediaElement is not an HTMLMediaElement', function(done) {
+        Peaks.init({
+          containers: {
+            overview: document.getElementById('overview-container'),
+            zoomview: document.getElementById('zoomview-container')
+          },
+          mediaElement: document.createElement('div'),
+          dataUri: { arraybuffer: '/base/test_data/sample.dat' }
+        }, function(err, instance) {
+          expect(err).to.be.an.instanceOf(TypeError);
+          expect(err.message).to.match(/HTMLMediaElement/);
+          expect(instance).to.equal(undefined);
           done();
-        }, 0);
+        });
       });
 
-      it('should throw an exception if the zoomLevels option is missing', function() {
-        expect(function() {
-          Peaks.init({
-            container: document.getElementById('waveform-visualiser-container'),
-            mediaElement: document.querySelector('audio'),
-            dataUri: 'base/test_data/sample.json',
-            zoomLevels: null
-          });
-        }).to.throw(/zoomLevels/);
+      it('should invoke callback with an error if both a dataUri and audioContext are provided', function(done) {
+        Peaks.init({
+          containers: {
+            overview: document.getElementById('overview-container'),
+            zoomview: document.getElementById('zoomview-container')
+          },
+          mediaElement: document.getElementById('media'),
+          dataUri: { arraybuffer: '/base/test_data/sample.dat' },
+          audioContext: new TestAudioContext()
+        }, function(err, instance) {
+          expect(err).to.be.an.instanceOf(TypeError);
+          expect(err.message).to.match(/only pass one/);
+          expect(instance).to.equal(undefined);
+          done();
+        });
       });
 
-      it('should throw an exception if the zoomLevels option is empty', function() {
-        expect(function() {
-          Peaks.init({
-            container: document.getElementById('waveform-visualiser-container'),
-            mediaElement: document.querySelector('audio'),
-            dataUri: 'base/test_data/sample.json',
-            zoomLevels: []
-          });
-        }).to.throw(/zoomLevels/);
+      it('should invoke callback with an error if neither a dataUri nor an audioContext are provided', function(done) {
+        Peaks.init({
+          containers: {
+            overview: document.getElementById('overview-container'),
+            zoomview: document.getElementById('zoomview-container')
+          },
+          mediaElement: document.getElementById('media')
+        }, function(err, instance) {
+          expect(err).to.be.an.instanceOf(Error);
+          expect(err.message).to.match(/audioContext, or dataUri, or waveformData/);
+          expect(instance).to.equal(undefined);
+          done();
+        });
       });
 
-      it('should throw an exception if the zoomLevels option is not in ascending order', function() {
-        expect(function() {
-          Peaks.init({
-            container: document.getElementById('waveform-visualiser-container'),
-            mediaElement: document.querySelector('audio'),
-            dataUri: 'base/test_data/sample.json',
-            zoomLevels: [1024, 512]
+      it('should invoke callback with an error if the dataUri is not an object', function(done) {
+        Peaks.init({
+          containers: {
+            overview: document.getElementById('overview-container'),
+            zoomview: document.getElementById('zoomview-container')
+          },
+          mediaElement: document.getElementById('media'),
+          dataUri: true
+        }, function(err, instance) {
+          expect(err).to.be.an.instanceOf(TypeError);
+          expect(err.message).to.match(/dataUri/);
+          expect(instance).to.equal(undefined);
+          done();
+        });
+      });
+
+      it('should invoke callback with an error if provided json waveform data is invalid', function(done) {
+        Peaks.init({
+          containers: {
+            overview: document.getElementById('overview-container'),
+            zoomview: document.getElementById('zoomview-container')
+          },
+          mediaElement: document.getElementById('media'),
+          waveformData: {
+            json: { data: 'foo' }
+          }
+        }, function(err, instance) {
+          expect(err).to.be.an.instanceOf(Error);
+          expect(instance).to.equal(undefined);
+          done();
+        });
+      });
+
+      it('should invoke callback with an error if provided binary waveform data is invalid', function(done) {
+        fetch('/base/test_data/unknown.dat')
+          .then(function(response) {
+            return response.arrayBuffer();
+          })
+          .then(function(buffer) {
+            Peaks.init({
+              containers: {
+                overview: document.getElementById('overview-container'),
+                zoomview: document.getElementById('zoomview-container')
+              },
+              mediaElement: document.getElementById('media'),
+              waveformData: {
+                arraybuffer: buffer
+              }
+            }, function(err, instance) {
+              expect(err).to.be.an.instanceOf(Error);
+              expect(instance).to.equal(undefined);
+              done();
+            });
           });
-        }).to.throw(/zoomLevels/);
+      });
+
+      it('should invoke callback with an error if no container is provided', function(done) {
+        Peaks.init({
+          mediaElement: document.getElementById('media'),
+          dataUri: { arraybuffer: '/base/test_data/sample.dat' }
+        }, function(err, instance) {
+          expect(err).to.be.an.instanceOf(Error);
+          expect(err.message).to.match(/container or containers option/);
+          expect(instance).to.equal(undefined);
+          done();
+        });
+      });
+
+      it('should invoke callback with an error if the container has no layout', function(done) {
+        Peaks.init({
+          container: document.createElement('div'),
+          mediaElement: document.getElementById('media'),
+          dataUri: { arraybuffer: '/base/test_data/sample.dat' }
+        }, function(err, instance) {
+          expect(err).to.be.an.instanceOf(TypeError);
+          expect(err.message).to.match(/width/);
+          expect(instance).to.equal(undefined);
+          done();
+        });
+      });
+
+      it('should invoke callback with an error if the template is not a string or an HTMLElement', function(done) {
+        Peaks.init({
+          container: document.getElementById('container'),
+          mediaElement: document.getElementById('media'),
+          dataUri: { arraybuffer: '/base/test_data/sample.dat' },
+          template: null
+        }, function(err, instance) {
+          expect(err).to.be.an.instanceOf(TypeError);
+          expect(err.message).to.match(/template/);
+          expect(instance).to.equal(undefined);
+          done();
+        });
+      });
+
+      it('should invoke callback with an error if the logger is defined and not a function', function(done) {
+        Peaks.init({
+          containers: {
+            overview: document.getElementById('overview-container'),
+            zoomview: document.getElementById('zoomview-container')
+          },
+          mediaElement: document.getElementById('media'),
+          dataUri: '/base/test_data/sample.json',
+          logger: 'foo'
+        }, function(err, instance) {
+          expect(err).to.be.an.instanceOf(TypeError);
+          expect(err.message).to.match(/logger/);
+          expect(instance).to.equal(undefined);
+          done();
+        });
+      });
+
+      it('should invoke callback with an error if the zoomLevels option is missing', function(done) {
+        Peaks.init({
+          containers: {
+            overview: document.getElementById('overview-container'),
+            zoomview: document.getElementById('zoomview-container')
+          },
+          mediaElement: document.getElementById('media'),
+          dataUri: '/base/test_data/sample.json',
+          zoomLevels: null
+        }, function(err, instance) {
+          expect(err).to.be.an.instanceOf(Error);
+          expect(err.message).to.match(/zoomLevels/);
+          expect(instance).to.equal(undefined);
+          done();
+        });
+      });
+
+      it('should invoke callback with an error if the zoomLevels option is empty', function(done) {
+        Peaks.init({
+          containers: {
+            overview: document.getElementById('overview-container'),
+            zoomview: document.getElementById('zoomview-container')
+          },
+          mediaElement: document.getElementById('media'),
+          dataUri: '/base/test_data/sample.json',
+          zoomLevels: []
+        }, function(err, instance) {
+          expect(err).to.be.an.instanceOf(Error);
+          expect(err.message).to.match(/zoomLevels/);
+          expect(instance).to.equal(undefined);
+          done();
+        });
+      });
+
+      it('should invoke callback with an error if the zoomLevels option is not in ascending order', function(done) {
+        Peaks.init({
+          containers: {
+            overview: document.getElementById('overview-container'),
+            zoomview: document.getElementById('zoomview-container')
+          },
+          mediaElement: document.getElementById('media'),
+          dataUri: '/base/test_data/sample.json',
+          zoomLevels: [1024, 512]
+        }, function(err, instance) {
+          expect(err).to.be.an.instanceOf(Error);
+          expect(err.message).to.match(/zoomLevels/);
+          expect(instance).to.equal(undefined);
+          done();
+        });
       });
     });
   });
 
-  describe('constructor', function() {
-    context('with valid options', function() {
-      it('should construct a Peaks object', function(done) {
-        p = new Peaks({
-          container: document.getElementById('waveform-visualiser-container'),
-          mediaElement: document.querySelector('audio'),
-          dataUri: { arraybuffer: 'base/test_data/sample.dat' }
+  describe('setSource', function() {
+    var waveformLayerDraw;
+
+    beforeEach(function(done) {
+      var options = {
+        containers: {
+          overview: document.getElementById('overview-container'),
+          zoomview: document.getElementById('zoomview-container')
+        },
+        mediaElement: document.getElementById('media'),
+        dataUri: { arraybuffer: '/base/test_data/sample.dat' },
+        zoomLevels: [512, 1024, 2048]
+      };
+
+      Peaks.init(options, function(err, instance) {
+        expect(err).to.equal(null);
+
+        p = instance;
+
+        var zoomview = p.views.getView('zoomview');
+        expect(zoomview).to.be.ok;
+
+        waveformLayerDraw = sinon.spy(zoomview._waveformLayer, 'draw');
+
+        done();
+      });
+    });
+
+    context('with invalid media url', function() {
+      it('should return an error', function(done) {
+        var options = {
+          mediaUrl: '/base/test_data/unknown.mp3',
+          dataUri: {
+            arraybuffer: '/base/test_data/unknown.dat'
+          }
+        };
+
+        p.setSource(options, function(error) {
+          expect(error).to.be.an.instanceOf(MediaError);
+          done();
         });
+      });
+    });
 
-        expect(p).to.be.an.instanceof(Peaks);
+    context('with invalid json waveform data', function() {
+      it('should return an error', function(done) {
+        var options = {
+          mediaUrl: '/base/test_data/sample.mp3',
+          waveformData: {
+            json: { data: 'foo' }
+          }
+        };
 
-        p.on('peaks.ready', function() {
+        p.setSource(options, function(error) {
+          expect(error).to.be.an.instanceOf(Error);
+          done();
+        });
+      });
+    });
+
+    context('with valid json waveform data', function() {
+      it('should update the waveform', function(done) {
+        var sampleJsonData = require('../../test_data/sample.json');
+        var options = {
+          mediaUrl: '/base/test_data/sample.mp3',
+          waveformData: {
+            json: sampleJsonData
+          }
+        };
+
+        p.setSource(options, function(error) {
+          expect(error).to.be.undefined;
+          expect(waveformLayerDraw.callCount).to.equal(1);
+          done();
+        });
+      });
+    });
+
+    context('with waveform data url', function() {
+      it('should update the waveform', function(done) {
+        var options = {
+          mediaUrl: '/base/test_data/sample.mp3',
+          dataUri: {
+            arraybuffer: '/base/test_data/sample.dat'
+          }
+        };
+
+        p.setSource(options, function(error) {
+          expect(error).to.be.undefined;
+          expect(waveformLayerDraw.callCount).to.equal(1);
+          done();
+        });
+      });
+    });
+
+    context('with audioContext', function() {
+      it('should update the waveform', function(done) {
+        var options = {
+          mediaUrl: '/base/test_data/sample.mp3',
+          webAudio: {
+            audioContext: new TestAudioContext()
+          }
+        };
+
+        p.setSource(options, function(error) {
+          expect(error).to.be.undefined;
+          expect(waveformLayerDraw.callCount).to.equal(1);
+          done();
+        });
+      });
+    });
+
+    context('with audioBuffer', function() {
+      it('should update the waveform', function(done) {
+        var audioContext = new TestAudioContext();
+
+        fetch('/base/test_data/sample.mp3')
+          .then(function(response) {
+            return response.arrayBuffer();
+          })
+          .then(function(buffer) {
+            return audioContext.decodeAudioData(buffer);
+          })
+          .then(function(audioBuffer) {
+            var options = {
+              mediaUrl: '/base/test_data/sample.mp3',
+              webAudio: {
+                audioBuffer: audioBuffer,
+                multiChannel: true
+              }
+            };
+
+            p.setSource(options, function(error) {
+              expect(error).to.be.undefined;
+              expect(waveformLayerDraw.callCount).to.equal(1);
+              done();
+            });
+          });
+      });
+    });
+
+    context('with binary waveform data', function() {
+      it('should update the waveform', function(done) {
+        fetch('/base/test_data/sample.dat')
+          .then(function(response) {
+            return response.arrayBuffer();
+          })
+          .then(function(buffer) {
+            var options = {
+              mediaUrl: '/base/test_data/sample.mp3',
+              waveformData: {
+                arraybuffer: buffer
+              }
+            };
+
+            p.setSource(options, function(error) {
+              expect(error).to.be.undefined;
+              expect(waveformLayerDraw.callCount).to.equal(1);
+              done();
+            });
+          });
+      });
+    });
+
+    context('with invalid binary waveform data', function() {
+      it('should return an error', function(done) {
+        fetch('/base/test_data/unknown.dat')
+          .then(function(response) {
+            return response.arrayBuffer();
+          })
+          .then(function(buffer) {
+            var options = {
+              mediaUrl: '/base/test_data/sample.mp3',
+              waveformData: {
+                arraybuffer: buffer
+              }
+            };
+
+            p.setSource(options, function(error) {
+              expect(error).to.be.an.instanceOf(Error);
+              done();
+            });
+          });
+      });
+    });
+
+    context('with zoom levels', function() {
+      it('should update the instance zoom levels', function(done) {
+        var options = {
+          mediaUrl: '/base/test_data/sample.mp3',
+          webAudio: {
+            audioContext: new TestAudioContext()
+          },
+          zoomLevels: [128, 256]
+        };
+
+        p.setSource(options, function(error) {
+          expect(error).to.be.undefined;
+          expect(p.zoom.getZoomLevel()).to.equal(128);
+          expect(waveformLayerDraw.callCount).to.equal(1);
+          done();
+        });
+      });
+    });
+
+    context('with stereo waveform', function() {
+      it('should update the waveform', function(done) {
+        var options = {
+          mediaUrl: '/base/test_data/07023003.mp3',
+          dataUri: {
+            arraybuffer: '/base/test_data/07023003-2channel.dat'
+          },
+          zoomLevels: [128, 256]
+        };
+
+        p.setSource(options, function(error) {
+          expect(error).to.be.undefined;
+          expect(p.zoom.getZoomLevel()).to.equal(128);
+          expect(waveformLayerDraw.callCount).to.equal(1);
           done();
         });
       });
@@ -207,42 +699,26 @@ describe('Peaks', function() {
   });
 
   describe('destroy', function() {
-    var container;
-
-    beforeEach(function() {
-      var regularContainer = document.getElementById('waveform-visualiser-container');
-      container = document.createElement('div');
-      container.style.width = '400px';
-      container.style.height = '100px';
-      regularContainer.parentNode.appendChild(container);
-    });
-
-    afterEach(function() {
-      if (container.parentNode) {
-        container.parentNode.removeChild(container);
-      }
-    });
-
     it('should clean up event listeners', function(done) {
       var errorSpy = sinon.spy().named('window.onerror');
-      var resizeSpy = sinon.spy().named('window_resized');
       var oldOnError = window.onerror;
       window.onerror = errorSpy;
 
-      p = Peaks.init({
-        container: container,
-        mediaElement: document.querySelector('audio'),
-        audioContext: new TestAudioContext()
-      });
-
-      p.on('window_resized', resizeSpy);
-
-      p.on('waveform_ready.overview', function() {
-        container.parentNode.removeChild(container);
+      Peaks.init({
+        containers: {
+          overview: document.getElementById('overview-container'),
+          zoomview: document.getElementById('zoomview-container')
+        },
+        mediaElement: document.getElementById('media'),
+        webAudio: {
+          audioContext: new TestAudioContext()
+        }
+      }, function(err, instance) {
+        expect(err).to.equal(null);
 
         // Give peaks chance to bind its resize listener:
         setTimeout(function() {
-          p.destroy();
+          instance.destroy();
 
           // Fire a resize event, which would normally cause peaks to redraw
           var e = document.createEvent('HTMLEvents');
@@ -252,7 +728,6 @@ describe('Peaks', function() {
           // Our resize handler is asynchronously throttled, so give it a little time to settle.
           setTimeout(function() {
             window.onerror = oldOnError;
-            expect(resizeSpy).to.not.have.been.called;
             expect(errorSpy).to.not.have.been.called;
             done();
           }, 600);
@@ -261,191 +736,18 @@ describe('Peaks', function() {
     });
 
     it('should be safe to call more than once', function(done) {
-      var p = Peaks.init({
-        container: document.getElementById('waveform-visualiser-container'),
-        mediaElement: document.querySelector('audio'),
-        dataUri: { arraybuffer: 'base/test_data/sample.dat' }
-      });
+      Peaks.init({
+        containers: {
+          overview: document.getElementById('overview-container'),
+          zoomview: document.getElementById('zoomview-container')
+        },
+        mediaElement: document.getElementById('media'),
+        dataUri: { arraybuffer: '/base/test_data/sample.dat' }
+      }, function(err, peaks) {
+        expect(err).to.equal(null);
 
-      p.on('peaks.ready', function() {
-        p.destroy();
-        p.destroy();
-        done();
-      });
-    });
-  });
-
-  describe('core#getRemoteData', function() {
-    it('should use the dataUriDefaultFormat value as a format URL if dataUri is provided as string', function(done) {
-      p = Peaks.init({
-        container: document.getElementById('waveform-visualiser-container'),
-        mediaElement: document.querySelector('audio'),
-        dataUri: 'base/test_data/sample.json'
-      });
-
-      var spy = sinon.spy(p.waveform, '_handleRemoteData');
-
-      p.on('peaks.ready', function() {
-        var xhr = spy.getCall(0).args[1];
-
-        expect(xhr.getResponseHeader('content-type')).to.equal('application/json');
-
-        done();
-      });
-    });
-
-    it('should emit an error if the data handling fails', function(done) {
-      p = Peaks.init({
-        container: document.getElementById('waveform-visualiser-container'),
-        mediaElement: document.querySelector('audio'),
-        dataUri: 'base/test_data/404-file.json'
-      });
-
-      p.on('error', function(err) {
-        done();
-      });
-    });
-
-    it('should emit an error if the data handling fails due to a network error', function(done) {
-      p = Peaks.init({
-        container: document.getElementById('waveform-visualiser-container'),
-        mediaElement: document.querySelector('audio'),
-        dataUri: 'file:///test.json'
-      });
-
-      p.on('error', function(err) {
-        expect(err).to.be.an.instanceof(Error);
-        expect(err.message).to.equal('XHR Failed');
-        done();
-      });
-    });
-
-    it('should use the JSON dataUri connector', function(done) {
-      p = Peaks.init({
-        container: document.getElementById('waveform-visualiser-container'),
-        mediaElement: document.querySelector('audio'),
-        dataUri: {
-          json: 'base/test_data/sample.json'
-        }
-      });
-
-      var spy = sinon.spy(p.waveform, '_handleRemoteData');
-
-      p.on('peaks.ready', function() {
-        var xhr = spy.getCall(0).args[1];
-
-        expect(xhr.getResponseHeader('content-type')).to.equal('application/json');
-
-        done();
-      });
-    });
-
-    it('should not use credentials if withCredentials is not set', function(done) {
-      p = Peaks.init({
-        container: document.getElementById('waveform-visualiser-container'),
-        mediaElement: document.querySelector('audio'),
-        dataUri: {
-          json: 'base/test_data/sample.json'
-        }
-      });
-
-      var spy = sinon.spy(p.waveform, '_handleRemoteData');
-
-      p.on('peaks.ready', function() {
-        var xhr = spy.getCall(0).args[1];
-
-        expect(xhr.withCredentials).to.equal(false);
-
-        done();
-      });
-    });
-
-    it('should use credentials if withCredentials is set', function(done) {
-      p = Peaks.init({
-        container: document.getElementById('waveform-visualiser-container'),
-        mediaElement: document.querySelector('audio'),
-        withCredentials: true,
-        dataUri: {
-          json: 'base/test_data/sample.json'
-        }
-      });
-
-      var spy = sinon.spy(p.waveform, '_handleRemoteData');
-
-      p.on('peaks.ready', function() {
-        var xhr = spy.getCall(0).args[1];
-
-        expect(xhr.withCredentials).to.equal(true);
-
-        done();
-      });
-    });
-
-    ('ArrayBuffer' in window) && it('should use the arraybuffer dataUri connector or fail if not available', function(done) {
-      p = Peaks.init({
-        container: document.getElementById('waveform-visualiser-container'),
-        mediaElement: document.querySelector('audio'),
-        dataUri: {
-          arraybuffer: 'base/test_data/sample.dat'
-        }
-      });
-
-      var spy = sinon.spy(p.waveform, '_handleRemoteData');
-
-      p.on('peaks.ready', function() {
-        var xhr = spy.getCall(0).args[1];
-
-        expect(xhr.getResponseHeader('content-type')).to.equal('application/octet-stream');
-
-        done();
-      });
-    });
-
-    !('ArrayBuffer' in window) && it('should throw an exception if the only available format is browser incompatible', function() {
-      expect(function() {
-        Peaks.init({
-          container: document.getElementById('waveform-visualiser-container'),
-          mediaElement: document.querySelector('audio'),
-          dataUri: {
-            arraybuffer: 'base/test_data/sample.dat'
-          }
-        });
-      }).to.throw();
-    });
-
-    it('should pick the arraybuffer format over the JSON one', function(done) {
-      p = Peaks.init({
-        container: document.getElementById('waveform-visualiser-container'),
-        mediaElement: document.querySelector('audio'),
-        dataUri: {
-          arraybuffer: 'base/test_data/sample.dat',
-          json: 'base/test_data/sample.json'
-        }
-      });
-
-      var spy = sinon.spy(p.waveform, '_handleRemoteData');
-      var expectedContentType = window.ArrayBuffer ? 'application/octet-stream' : 'application/json';
-
-      p.on('peaks.ready', function() {
-        var xhr = spy.getCall(0).args[1];
-
-        expect(xhr.getResponseHeader('content-type')).to.equal(expectedContentType);
-
-        done();
-      });
-    });
-
-    ('AudioBuffer' in window) && it('should build using WebAudio if the API is available and no dataUri is provided', function(done) {
-      p = Peaks.init({
-        container: document.getElementById('waveform-visualiser-container'),
-        mediaElement: document.querySelector('audio'),
-        audioContext: new TestAudioContext()
-      });
-
-      var spy = sinon.spy(p.waveform, '_handleRemoteData');
-
-      p.on('peaks.ready', function() {
-        expect(spy).to.have.been.calledOnce;
+        peaks.destroy();
+        peaks.destroy();
 
         done();
       });

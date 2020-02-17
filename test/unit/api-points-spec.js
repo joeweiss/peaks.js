@@ -1,7 +1,9 @@
 'use strict';
 
+require('./setup');
+
 var Peaks = require('../../src/main');
-var Point = require('../../src/main/markers/point');
+var Point = require('../../src/point');
 
 describe('Peaks.points', function() {
   var p, deprecationLogger;
@@ -9,16 +11,21 @@ describe('Peaks.points', function() {
   beforeEach(function(done) {
     deprecationLogger = sinon.spy();
 
-    p = Peaks.init({
-      container: document.getElementById('waveform-visualiser-container'),
-      mediaElement: document.querySelector('audio'),
+    var options = {
+      containers: {
+        overview: document.getElementById('overview-container'),
+        zoomview: document.getElementById('zoomview-container')
+      },
+      mediaElement: document.getElementById('media'),
       dataUri: 'base/test_data/sample.json',
-      keyboard: true,
-      height: 240,
       deprecationLogger: deprecationLogger
-    });
+    };
 
-    p.on('peaks.ready', done);
+    Peaks.init(options, function(err, instance) {
+      expect(err).to.equal(null);
+      p = instance;
+      done();
+    });
   });
 
   afterEach(function() {
@@ -88,31 +95,21 @@ describe('Peaks.points', function() {
       p.points.add(points);
 
       expect(p.points.getPoints()).to.have.lengthOf(2);
-      expect(p.points.getPoints()[1]).to.include.keys('time', 'labelText');
+      expect(p.points.getPoints()[1].time).to.equal(12);
+      expect(p.points.getPoints()[1].labelText).to.equal('Another point');
     });
 
-    it('should accept a list of properties for a single point (deprecated)', function() {
-      p.points.add(10, true, '#ff0000', 'A point');
-
-      var points = p.points.getPoints();
-
-      expect(points).to.have.lengthOf(1);
-      expect(points[0]).to.be.an.instanceOf(Point);
-      expect(points[0].time).to.equal(10);
-
-      expect(deprecationLogger).to.have.been.calledOnce;
+    it('should should throw if the argument is not an object', function() {
+      expect(function() {
+        p.points.add(10, true, '#ff0000', 'A point');
+      }).to.throw(TypeError);
     });
 
-    it('should accept a point with a timestamp value (deprecated)', function() {
-      p.points.add({ timestamp: 10, editable: true, labelText: 'A point' });
-
-      var points = p.points.getPoints();
-
-      expect(points).to.have.lengthOf(1);
-      expect(points[0]).to.be.an.instanceOf(Point);
-      expect(points[0].time).to.equal(10);
-
-      expect(deprecationLogger).to.have.been.calledOnce;
+    it('should throw if the time is missing', function() {
+      expect(function() {
+        // 'timestamp' should be 'time'
+        p.points.add({ timestamp: 10, editable: true, labelText: 'A point' });
+      }).to.throw(TypeError);
     });
 
     it('should accept an optional id', function() {

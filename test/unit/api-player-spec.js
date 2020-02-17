@@ -1,25 +1,30 @@
 'use strict';
 
+require('./setup');
+
 var Peaks = require('../../src/main');
 
 describe('Peaks.player', function() {
-  var p, logger;
+  var p;
 
   beforeEach(function(done) {
-    logger = sinon.spy();
-
-    p = Peaks.init({
-      container: document.getElementById('waveform-visualiser-container'),
-      mediaElement: document.querySelector('audio'),
+    var options = {
+      containers: {
+        overview: document.getElementById('overview-container'),
+        zoomview: document.getElementById('zoomview-container')
+      },
+      mediaElement: document.getElementById('media'),
       dataUri: {
         json: 'base/test_data/sample.json'
       },
-      keyboard: true,
-      height: 240,
-      logger: logger
-    });
+      logger: sinon.spy()
+    };
 
-    p.on('peaks.ready', done);
+    Peaks.init(options, function(err, instance) {
+      expect(err).to.equal(null);
+      p = instance;
+      done();
+    });
   });
 
   afterEach(function() {
@@ -37,8 +42,11 @@ describe('Peaks.player', function() {
 
     it('should return an updated time if it has been modified through the audio element', function(done) {
       p.on('player_seek', function(currentTime) {
-        var diff = Math.abs(p.player.getCurrentTime() - newTime);
+        expect(currentTime).to.equal(p.player.getCurrentTime());
+
+        var diff = Math.abs(currentTime - newTime);
         expect(diff).to.be.lessThan(0.2);
+
         done();
       });
 
@@ -97,7 +105,7 @@ describe('Peaks.player', function() {
 
   describe('getCurrentSource', function() {
     it('should return the media url', function() {
-      expect(p.player.getCurrentSource()).to.match(/http:\/\/localhost:8080\/base\/test_data\/sample.(?:mp3|ogg)/);
+      expect(p.player.getCurrentSource()).to.match(/^http:\/\/localhost:\d+\/base\/test_data\/sample.(?:mp3|ogg)$/);
     });
   });
 

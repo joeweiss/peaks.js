@@ -1,5 +1,179 @@
 # Peaks.js
 
+## 0.19.0 (2020/02/06)
+
+ * (#309) Fixed rendering of non-editable segment marker handles (@chrisn)
+
+ * Reduced size of npm and Bower installs by removing unnecessary files
+   (@chrisn)
+
+ * Refactored to simplify code structure. All source files are now placed
+   in a single 'src' directory, and several files have been renamed for
+   consistency (@chrisn)
+
+## 0.18.1 (2020/02/02)
+
+ * (#306) Updated TypeScript declarations (@tscz)
+
+ * Documented zoomview.setStartTime() (@chrisn)
+
+## 0.18.0 (2020/02/02)
+
+ * (#300) Redesigned the marker customization API. Refer to customizing.md
+   for detailed documentation on how to customize the appearance of point
+   and segment marker handles (@chrisn)
+
+ * Added a view.fitToContainer() method that resizes the waveform and point and
+   segment marker handles to fit the available space (@chrisn)
+
+ * Added zoomview.setStartTime() method (@chrisn)
+
+ * The `inMarkerColor` and `outMarkerColor` configuration options have been
+   renamed to `segmentStartMarkerColor` and `segmentEndMarkerColor` (@chrisn)
+
+ * (#305) Added a zoomview.setZoom() method that gives applications greater
+   flexibility in setting the zoom level. The zoom level can be set to (a)
+   a number of samples per pixel, as per the existing peaks.zoom.setZoom() API,
+   (b) a number of seconds fit to the available width, or (c) the entire audio
+   duration fit to the available width (@chrisn)
+
+## 0.17.0 (2020/01/16)
+
+ * (#302) Fixed segment handle dragging so that dragging the start marker does
+   not change the segment end time, and vice versa (@chrisn)
+
+ * Added view.enableMarkerEditing() method (@chrisn)
+
+ * Updated Typescript definitions (@is343, @chrisn)
+
+## 0.16.0 (2019/12/16)
+
+ * (#262) Increased hit region for segment mouseenter and mouseleave events,
+   no longer requires placing the mouse directly over the waveform image
+   (@chrisn)
+
+ * (#263, #283) Added destroyZoomview() and destroyOverview() methods (@chrisn)
+
+## 0.15.0 (2019/12/04)
+
+ * (#293) Added overview.dblclick and zoomview.dblclick events (@chrisn)
+
+ * Fixed Typescript definitions (@tscz, @chrisn)
+
+## 0.14.5 (2019/11/10)
+
+ * (#290) Fixed setAmplitudeScale() to update all waveform segments (@chrisn)
+
+ * Disabled warnings from Konva.js
+
+ * Fixed demo pages for Webkit
+
+## 0.14.4 (2019/11/06)
+
+ * (#289) Fixed overlapHighlightOffset behaviour when value too large
+   (@jodonnell)
+
+## 0.14.3 (2019/11/06)
+
+ * (#288) Added overviewHighlightOffset option, and renamed the
+   overviewHighlightRectangleColor option to overviewHighlightColor
+   (@jodonnell)
+
+## 0.14.2 (2019/11/05)
+
+ * (#285) The axis labels are now correctly rendered on top of the waveform
+   (@chrisn)
+
+ * (#286) Fixed point/segment marker creation function options, and updated
+   documentation (@chrisn)
+
+## 0.14.1 (2019/10/31)
+
+ * (#284) Fixed `peaks.destroy()` (@chrisn)
+
+ * Updated waveform-data.js to v3.1.0 (@chrisn)
+
+## 0.14.0 (2019/10/23)
+
+ * (#287) Added `segment.dragstart` and `segment.dragend` events.
+   The `segment.dragged` event now receives a boolean parameter that indicates
+   whether the start or end marker is being dragged (@Spidy88)
+
+## 0.13.1 (2019/10/22)
+
+ * (#281) Fixed TypeScript definitions (@tscz)
+
+ * Updated demo pages to use updated `Peaks.init()` API options (@chrisn)
+
+## 0.13.0 (2019/09/11)
+
+ * (#228, #240) Added ability to intialise a Peaks instance given an
+   AudioBuffer
+
+ * The API for creating waveforms using the Web Audio API has changed.
+   Instead of passing an `audioContext` option to `Peaks.init()` or
+   `peaksInstance.setSource()`, you shoud now pass a `webAudio` object,
+   for example:
+
+    ```javascript
+    const options = {
+      // ... etc
+      webAudio: {
+        audioContext: new AudioContext(),
+        multiChannel: true
+      }
+    }
+
+    Peaks.init(options, function(err, peaksInstance) { ... });
+    ```
+
+ * The (undocumented) `waveformBuilderOptions` option has also been removed.
+   If you were using `amplitude_scale`, please use `view.setAmplitudeScale()`
+   instead. The `scale` option is now determined by the lowest `zoomLevels`
+   setting
+
+ * Added `view.enableAutoScroll()` method
+
+## 0.12.0 (2019/08/24)
+
+ * (#194) Added multi-channel waveform support (@chrisn)
+
+## 0.11.1 (2019/08/23)
+
+ * Updated waveform-data.js to v3.0.0 (@chrisn)
+
+## 0.11.0 (2019/08/11)
+
+ * (#243, #268) Added emitCueEvents option that causes Peaks.js to emit
+   'points.enter', 'segments.enter', and 'segments.exit' events during playback
+   or on seeking (@gmarinov, @chrisn)
+
+ * (#92) Added setSource() method to change the media element's source URL
+   and update the waveform (@chrisn)
+
+## 0.10.1 (2019/07/10)
+
+ * (#211) Added view.setAmplitudeScale() method, and documented new API methods
+   for creating and accessing the waveform views (@chrisn)
+
+ * (#270) Fixed segment rendering after updating startTime or endTime (@chrisn)
+
+ * (#267) Added option to run specific test files by glob pattern (@gmarinov)
+
+## 0.10.0 (2019/06/22)
+
+ * (#247) Added update() methods to allow changes to segment and point
+   properties (@zachsa)
+
+ * (#250) Added 'segments.mouseenter', 'segments.mouseleave', and
+   'segments.click' events (@zachsa)
+
+ * (#258) Added new 'containers' option, to allow creation of zoomable
+   and non-zoomable ('overview') waveform views. Added example pages,
+   in the 'demo' folder (@chrisn)
+
+ * Updated to Konva 3.3.3 (@chrisn)
+
 ## 0.9.14 (2019/03/05)
 
  * (#249, #251, #252) Enabled touch events for waveform container
@@ -20,35 +194,35 @@
 
 ## 0.9.11 (2018/07/27)
 
-* Refactored waveform rendering code, added WaveformShape class (@chrisn)
+ * Refactored waveform rendering code, added WaveformShape class (@chrisn)
 
-* Removed background layer, to reduce the number of Konva layers used (@chrisn)
+ * Removed background layer, to reduce the number of Konva layers used (@chrisn)
 
-* Avoid building waveform data multiple times when using the Web Audio API
-  (@cky917)
+ * Avoid building waveform data multiple times when using the Web Audio API
+   (@cky917)
 
 ## 0.9.10 (2018/06/23)
 
-* Fixed use of Web Audio API in Safari (@ibobobo)
+ * Fixed use of Web Audio API in Safari (@ibobobo)
 
-* Fixed point drag event handling (@anthonytex, @chrisn)
+ * Fixed point drag event handling (@anthonytex, @chrisn)
 
 ## 0.9.9 (2018/05/21)
 
-* Allow Peaks objects to be created using the new operator (@chrisn)
+ * Allow Peaks objects to be created using the new operator (@chrisn)
 
-* The points.add() and segments.add() methods now operate atomically. This
-  change ensures that the input point/segment objects are validated before
-  storing, so that if an exception is thrown, we leave the state of the
-  points/segments array as it was before the function was called (@chrisn)
+ * The points.add() and segments.add() methods now operate atomically. This
+   change ensures that the input point/segment objects are validated before
+   storing, so that if an exception is thrown, we leave the state of the
+   points/segments array as it was before the function was called (@chrisn)
 
-* Added 'points.mouseenter' and 'points.mouseleave' events. Also added
-  'points.dblclick', which replaces the (previously undocumented)
-  pointDblClickHandler config option (@markjongkind, @chrisn)
+ * Added 'points.mouseenter' and 'points.mouseleave' events. Also added
+   'points.dblclick', which replaces the (previously undocumented)
+   pointDblClickHandler config option (@markjongkind, @chrisn)
 
-* Added 'points.dragstart' and 'points.dragend' events, and renamed
-  'points.dragged' to 'points.dragmove'. The (also undocumented)
-  pointDragEndHandler config option is deprecated (@chrisn)
+ * Added 'points.dragstart' and 'points.dragend' events, and renamed
+   'points.dragged' to 'points.dragmove'. The (also undocumented)
+   pointDragEndHandler config option is deprecated (@chrisn)
 
 ## 0.9.8 (2018/02/10)
 

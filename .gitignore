@@ -1,6 +1,10 @@
 bower_components
+coverage
+demo/07023003.mp3
+demo/07023003-2channel.dat
+demo/peaks.js
+demo/sample.mp3
 docs
 node_modules
-index.js
 peaks.js
 peaks.js.map
